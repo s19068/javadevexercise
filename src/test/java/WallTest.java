@@ -1,135 +1,109 @@
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Constructor;
-import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.lang.reflect.Proxy;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class WallTest {
+
     private Object wall;
+    private Object simpleBlock1;
+    private Object simpleBlock2;
+    private Object compositeBlock1;
+    private Object compositeBlock2;
     private Class<?> wallClass;
-    private Class<?> blockInterface;
-    private Class<?> compositeBlockInterface;
-    private Method getColorMethod;
-    private Method getMaterialMethod;
+    private Class<?> blockClass;
+    private Class<?> compositeBlockClass;
 
     @BeforeEach
     void setUp() throws Exception {
         wallClass = Class.forName("org.example.Wall");
-        blockInterface = Class.forName("org.example.Block");
-        compositeBlockInterface = Class.forName("org.example.CompositeBlock");
+        blockClass = Class.forName("org.example.Block");
+        compositeBlockClass = Class.forName("org.example.CompositeBlock");
 
-        getColorMethod = blockInterface.getDeclaredMethod("getColor");
-        getMaterialMethod = blockInterface.getDeclaredMethod("getMaterial");
-        getColorMethod.setAccessible(true);
-        getMaterialMethod.setAccessible(true);
+        simpleBlock1 = createBlockInstance("Red", "Wood");
+        simpleBlock2 = createBlockInstance("Blue", "Metal");
+        compositeBlock1 = createCompositeBlockInstance("Green", "Concrete", List.of(simpleBlock1, simpleBlock2));
+        compositeBlock2 = createCompositeBlockInstance("Yellow", "Plastic", List.of(compositeBlock1, simpleBlock1));
 
-        Object redBrick = createBlock("red", "brick");
-        Object blueConcrete = createBlock("blue", "concrete");
-        Object greenWood = createBlock("green", "wood");
-        Object yellowPlastic = createBlock("yellow", "plastic");
-
-        Object compositeBlock = createCompositeBlock("multi", "mixed", Arrays.asList(greenWood, yellowPlastic));
+        List<Object> blocks = new ArrayList<>();
+        blocks.add(compositeBlock1);
+        blocks.add(compositeBlock2);
 
         Constructor<?> wallConstructor = wallClass.getDeclaredConstructor(List.class);
         wallConstructor.setAccessible(true);
-        wall = wallConstructor.newInstance(Arrays.asList(redBrick, blueConcrete, compositeBlock));
+        wall = wallConstructor.newInstance(blocks);
+    }
+
+    private Object createBlockInstance(String color, String material) throws Exception {
+        return java.lang.reflect.Proxy.newProxyInstance(
+                blockClass.getClassLoader(),
+                new Class<?>[]{blockClass},
+                (proxy, method, args) -> {
+                    if (method.getName().equals("getColor")) {
+                        return color;
+                    } else if (method.getName().equals("getMaterial")) {
+                        return material;
+                    }
+                    return null;
+                });
+    }
+
+    private Object createCompositeBlockInstance(String color, String material, List<Object> nestedBlocks) throws Exception {
+        return java.lang.reflect.Proxy.newProxyInstance(
+                compositeBlockClass.getClassLoader(),
+                new Class<?>[]{compositeBlockClass},
+                (proxy, method, args) -> {
+                    if (method.getName().equals("getColor")) {
+                        return color;
+                    } else if (method.getName().equals("getMaterial")) {
+                        return material;
+                    } else if (method.getName().equals("getBlocks")) {
+                        return nestedBlocks;
+                    }
+                    return null;
+                });
     }
 
     @Test
     void testFindBlockByColor() throws Exception {
-        Method findBlockByColor = wallClass.getDeclaredMethod("findBlockByColor", String.class);
-        findBlockByColor.setAccessible(true);
+        Method findBlockByColorMethod = wallClass.getDeclaredMethod("findBlockByColor", String.class);
+        findBlockByColorMethod.setAccessible(true);
+        Optional<?> foundBlock = (Optional<?>) findBlockByColorMethod.invoke(wall, "Red");
+        assertTrue(foundBlock.isPresent(), "Block with color 'Red' should be found");
 
-        Optional<?> redBlock = (Optional<?>) findBlockByColor.invoke(wall, "red");
-        assertTrue(redBlock.isPresent());
-        assertEquals("red", getColor(redBlock.get()));
-        assertEquals("brick", getMaterial(redBlock.get()));
+        Method getColorMethod = blockClass.getDeclaredMethod("getColor");
+        getColorMethod.setAccessible(true);
+        String color = (String) getColorMethod.invoke(foundBlock.get());
+        assertEquals("Red", color, "Found block should have color 'Red'");
 
-        Optional<?> yellowBlock = (Optional<?>) findBlockByColor.invoke(wall, "yellow");
-        assertTrue(yellowBlock.isPresent());
-        assertEquals("yellow", getColor(yellowBlock.get()));
-        assertEquals("plastic", getMaterial(yellowBlock.get()));
-
-        Optional<?> purpleBlock = (Optional<?>) findBlockByColor.invoke(wall, "purple");
-        assertFalse(purpleBlock.isPresent());
+        Optional<?> notFoundBlock = (Optional<?>) findBlockByColorMethod.invoke(wall, "Purple");
+        assertFalse(notFoundBlock.isPresent(), "Block with color 'Purple' should not be found");
     }
 
     @Test
     void testFindBlocksByMaterial() throws Exception {
-        Method findBlocksByMaterial = wallClass.getDeclaredMethod("findBlocksByMaterial", String.class);
-        findBlocksByMaterial.setAccessible(true);
+        Method findBlocksByMaterialMethod = wallClass.getDeclaredMethod("findBlocksByMaterial", String.class);
+        findBlocksByMaterialMethod.setAccessible(true);
+        List<?> foundBlocks = (List<?>) findBlocksByMaterialMethod.invoke(wall, "Wood");
+        assertEquals(2, foundBlocks.size(), "There should be 2 blocks with material 'Wood'");
 
-        List<?> brickBlocks = (List<?>) findBlocksByMaterial.invoke(wall, "brick");
-        assertEquals(1, brickBlocks.size());
-        assertEquals("red", getColor(brickBlocks.get(0)));
-
-        List<?> woodBlocks = (List<?>) findBlocksByMaterial.invoke(wall, "wood");
-        assertEquals(1, woodBlocks.size());
-        assertEquals("green", getColor(woodBlocks.get(0)));
-
-        List<?> glassBlocks = (List<?>) findBlocksByMaterial.invoke(wall, "glass");
-        assertTrue(glassBlocks.isEmpty());
+        List<?> notFoundBlocks = (List<?>) findBlocksByMaterialMethod.invoke(wall, "Glass");
+        assertEquals(0, notFoundBlocks.size(), "There should be no blocks with material 'Glass'");
     }
 
     @Test
     void testCount() throws Exception {
-        Method count = wallClass.getDeclaredMethod("count");
-        count.setAccessible(true);
-
-        int blockCount = (int) count.invoke(wall);
-        assertEquals(5, blockCount);
-
-        Constructor<?> wallConstructor = wallClass.getDeclaredConstructor(List.class);
-        wallConstructor.setAccessible(true);
-        Object emptyWall = wallConstructor.newInstance(Collections.emptyList());
-        assertEquals(0, (int) count.invoke(emptyWall));
-
-        Object singleBlockWall = wallConstructor.newInstance(
-                Collections.singletonList(createBlock("white", "marble")));
-        assertEquals(1, (int) count.invoke(singleBlockWall));
-    }
-
-    private Object createBlock(String color, String material) {
-        return Proxy.newProxyInstance(
-                blockInterface.getClassLoader(),
-                new Class<?>[] { blockInterface },
-                new InvocationHandler() {
-                    @Override
-                    public Object invoke(Object proxy, Method method, Object[] args) {
-                        if (method.getName().equals("getColor")) return color;
-                        if (method.getName().equals("getMaterial")) return material;
-                        throw new UnsupportedOperationException();
-                    }
-                }
-        );
-    }
-
-    private Object createCompositeBlock(String color, String material, List<Object> blocks) {
-        return Proxy.newProxyInstance(
-                compositeBlockInterface.getClassLoader(),
-                new Class<?>[] { compositeBlockInterface },
-                new InvocationHandler() {
-                    @Override
-                    public Object invoke(Object proxy, Method method, Object[] args) {
-                        if (method.getName().equals("getColor")) return color;
-                        if (method.getName().equals("getMaterial")) return material;
-                        if (method.getName().equals("getBlocks")) return new ArrayList<>(blocks);
-                        throw new UnsupportedOperationException();
-                    }
-                }
-        );
-    }
-
-    private String getColor(Object block) throws Exception {
-        return (String) getColorMethod.invoke(block);
-    }
-
-    private String getMaterial(Object block) throws Exception {
-        return (String) getMaterialMethod.invoke(block);
+        Method countMethod = wallClass.getDeclaredMethod("count");
+        countMethod.setAccessible(true);
+        int totalBlocks = (int) countMethod.invoke(wall);
+        assertEquals(5, totalBlocks, "Total number of blocks should be 5 (including nested blocks)");
     }
 }

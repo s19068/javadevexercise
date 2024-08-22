@@ -1,67 +1,63 @@
 package org.example;
 
 import java.util.*;
-import java.util.function.Predicate;
 
 public class Wall implements Structure {
     private List<Block> blocks;
 
     public Wall(List<Block> blocks) {
-        this.blocks = new ArrayList<>(blocks);
+        this.blocks = blocks;
     }
 
     @Override
     public Optional<Block> findBlockByColor(String color) {
-        return findBlock(block -> color.equals(block.getColor()));
+        return findBlockByColorRecursive(color, blocks);
     }
 
-    @Override
-    public List<Block> findBlocksByMaterial(String material) {
-        return findBlocks(block -> material.equals(block.getMaterial()));
-    }
-
-    @Override
-    public int count() {
-        return countBlocks();
-    }
-
-    private Optional<Block> findBlock(Predicate<Block> predicate) {
-        Deque<Block> stack = new ArrayDeque<>(blocks);
-        while (!stack.isEmpty()) {
-            Block current = stack.pop();
-            if (predicate.test(current)) {
-                return Optional.of(current);
+    private Optional<Block> findBlockByColorRecursive(String color, List<Block> blocks) {
+        for (Block block : blocks) {
+            if (block.getColor().equals(color)) {
+                return Optional.of(block);
             }
-            if (current instanceof CompositeBlock) {
-                stack.addAll(((CompositeBlock) current).getBlocks());
+            if (block instanceof CompositeBlock) {
+                Optional<Block> found = findBlockByColorRecursive(color, ((CompositeBlock) block).getBlocks());
+                if (found.isPresent()) {
+                    return found;
+                }
             }
         }
         return Optional.empty();
     }
 
-    private List<Block> findBlocks(Predicate<Block> predicate) {
+    @Override
+    public List<Block> findBlocksByMaterial(String material) {
         List<Block> result = new ArrayList<>();
-        Deque<Block> stack = new ArrayDeque<>(blocks);
-        while (!stack.isEmpty()) {
-            Block current = stack.pop();
-            if (predicate.test(current)) {
-                result.add(current);
-            }
-            if (current instanceof CompositeBlock) {
-                stack.addAll(((CompositeBlock) current).getBlocks());
-            }
-        }
+        findBlocksByMaterialRecursive(material, blocks, result);
         return result;
     }
 
-    private int countBlocks() {
+    private void findBlocksByMaterialRecursive(String material, List<Block> blocks, List<Block> result) {
+        for (Block block : blocks) {
+            if (block.getMaterial().equals(material)) {
+                result.add(block);
+            }
+            if (block instanceof CompositeBlock) {
+                findBlocksByMaterialRecursive(material, ((CompositeBlock) block).getBlocks(), result);
+            }
+        }
+    }
+
+    @Override
+    public int count() {
+        return countRecursive(blocks);
+    }
+
+    private int countRecursive(List<Block> blocks) {
         int count = 0;
-        Deque<Block> stack = new ArrayDeque<>(blocks);
-        while (!stack.isEmpty()) {
-            Block current = stack.pop();
+        for (Block block : blocks) {
             count++;
-            if (current instanceof CompositeBlock) {
-                stack.addAll(((CompositeBlock) current).getBlocks());
+            if (block instanceof CompositeBlock) {
+                count += countRecursive(((CompositeBlock) block).getBlocks());
             }
         }
         return count;

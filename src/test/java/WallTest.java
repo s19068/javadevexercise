@@ -3,10 +3,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Constructor;
-import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -51,6 +52,15 @@ class WallTest {
                         return color;
                     } else if (method.getName().equals("getMaterial")) {
                         return material;
+                    } else if (method.getName().equals("equals")) {
+                        if (args[0] instanceof Proxy) {
+                            Object otherColor = blockClass.getDeclaredMethod("getColor").invoke(args[0]);
+                            Object otherMaterial = blockClass.getDeclaredMethod("getMaterial").invoke(args[0]);
+                            return color.equals(otherColor) && material.equals(otherMaterial);
+                        }
+                        return false;
+                    } else if (method.getName().equals("hashCode")) {
+                        return Objects.hash(color, material);
                     }
                     return null;
                 });
@@ -67,6 +77,16 @@ class WallTest {
                         return material;
                     } else if (method.getName().equals("getBlocks")) {
                         return nestedBlocks;
+                    } else if (method.getName().equals("equals")) {
+                        if (args[0] instanceof Proxy) {
+                            Object otherColor = compositeBlockClass.getDeclaredMethod("getColor").invoke(args[0]);
+                            Object otherMaterial = compositeBlockClass.getDeclaredMethod("getMaterial").invoke(args[0]);
+                            Object otherBlocks = compositeBlockClass.getDeclaredMethod("getBlocks").invoke(args[0]);
+                            return color.equals(otherColor) && material.equals(otherMaterial) && nestedBlocks.equals(otherBlocks);
+                        }
+                        return false;
+                    } else if (method.getName().equals("hashCode")) {
+                        return Objects.hash(color, material, nestedBlocks);
                     }
                     return null;
                 });
